@@ -1,0 +1,4 @@
+
+
+* Compile/edit/debug cycle
+go install github.com/ginabythebay/file_inbox/cmd/... ;and go test  github.com/ginabythebay/file_inbox/... ;and fileinbox

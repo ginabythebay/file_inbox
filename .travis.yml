@@ -3,5 +3,5 @@ go:
   - 1.7
   - tip
 script:
-  - go install
+  - go install ./...
   - go test -v ./...

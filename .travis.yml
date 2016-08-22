@@ -1,0 +1,7 @@
+language: go
+go:
+  - 1.7
+  - tip
+script:
+  - go install
+  - go test -v ./...

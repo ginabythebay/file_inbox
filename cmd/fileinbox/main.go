@@ -138,42 +138,62 @@ func isDir(name string) bool {
 	return fi.IsDir()
 }
 
-func doFile(ctx *cli.Context) error {
+type fileResult struct {
+	okCount      uint32
+	failureCount uint32
+	missingDirs  map[string]bool
+}
+
+func (fr fileResult) summarize() error {
+	log.Printf("\n\n%d files moved.", fr.okCount)
+	if len(fr.missingDirs) != 0 {
+		log.Println("\n\nThe following directories are missing:")
+		for k := range fr.missingDirs {
+			log.Printf("    %s", k)
+		}
+	}
+	if fr.failureCount != 0 {
+		log.Printf("\n\nThere were %d failures", fr.failureCount)
+		return fmt.Errorf("There were %d failures", fr.failureCount)
+	}
+	return nil
+}
+
+func doFileInner(ctx *cli.Context) (fileResult, error) {
+	fr := fileResult{}
+	fr.missingDirs = map[string]bool{}
+
 	skipconfig := ctx.Bool("skipconfig")
 	config := &Config{
 		persist: !skipconfig,
 	}
 	if err := config.read(); err != nil {
-		return err
+		return fr, err
 	}
 
 	if ctx.String("root") == "" && config.Root == "" {
 		log.Print("You must use the --root flag to specify a root directory.  This will be stored for later use.")
-		return nil
+		return fr, nil
 	}
 
 	if ctx.String("root") != "" {
 		config.Root = ctx.String("root")
 		if err := config.write(); err != nil {
-			return err
+			return fr, err
 		}
 	}
 
 	inbox := config.inbox()
 	if !isDir(inbox) {
 		log.Printf("%q does not appear to be a directory", inbox)
-		return os.ErrInvalid
+		return fr, os.ErrInvalid
 	}
 
 	files, err := ioutil.ReadDir(inbox)
 	if err != nil {
 		log.Printf("Unable to dir %q: %v", inbox, err)
-		return err
+		return fr, err
 	}
-
-	var okCount uint32
-	var failureCount uint32
-	missingDirs := map[string]bool{}
 
 	for _, file := range files {
 		b := file.Name()
@@ -182,15 +202,15 @@ func doFile(ctx *cli.Context) error {
 
 		if len(tokens) < 2 {
 			log.Printf("Unable to parse %q, skipping", path.Join(inbox, b))
-			failureCount++
+			fr.failureCount++
 			continue
 		}
 		ext := path.Ext(b)
 		dest := strings.TrimSuffix(tokens[1], ext)
 		dest = config.dest(dest)
 		if !isDir(dest) {
-			missingDirs[dest] = true
-			failureCount++
+			fr.missingDirs[dest] = true
+			fr.failureCount++
 			continue
 		}
 
@@ -199,23 +219,19 @@ func doFile(ctx *cli.Context) error {
 		err = os.Rename(oldPath, newPath)
 		if err != nil {
 			log.Printf("Unable to rename from %q to %q: %v", oldPath, newPath, err)
-			failureCount++
+			fr.failureCount++
 			continue
 		}
-		okCount++
+		fr.okCount++
 	}
 
-	log.Printf("\n\n%d files moved.", okCount)
-	if len(missingDirs) != 0 {
-		log.Println("\n\nThe following directories are missing:")
-		for k := range missingDirs {
-			log.Printf("    %s", k)
-		}
-	}
-	if failureCount != 0 {
-		log.Printf("\n\nThere were %d failures", failureCount)
-		return fmt.Errorf("There were %d failures", failureCount)
-	}
+	return fr, nil
+}
 
-	return nil
+func doFile(ctx *cli.Context) error {
+	fr, err := doFileInner(ctx)
+	if err != nil {
+		return err
+	}
+	return fr.summarize()
 }

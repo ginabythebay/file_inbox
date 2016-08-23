@@ -9,6 +9,7 @@ import (
 	"os/user"
 	"path"
 	"runtime"
+	"strings"
 	"syscall"
 
 	yaml "gopkg.in/yaml.v2"
@@ -18,7 +19,8 @@ import (
 
 // Config represents some configuration we can store/read
 type Config struct {
-	Root string
+	persist bool
+	Root    string
 }
 
 func (c *Config) path() (string, error) {
@@ -32,6 +34,9 @@ func (c *Config) path() (string, error) {
 }
 
 func (c *Config) read() error {
+	if !c.persist {
+		return nil
+	}
 	p, err := c.path()
 	if err != nil {
 		return err
@@ -54,6 +59,9 @@ func (c *Config) read() error {
 }
 
 func (c *Config) write() error {
+	if !c.persist {
+		return nil
+	}
 	p, err := c.path()
 	if err != nil {
 		return err
@@ -80,6 +88,14 @@ func (c *Config) write() error {
 	return nil
 }
 
+func (c *Config) inbox() string {
+	return path.Join(c.Root, "inbox")
+}
+
+func (c *Config) dest(name string) string {
+	return path.Join(c.Root, "filed", name)
+}
+
 func main() {
 	sigChan := make(chan os.Signal)
 	go func() {
@@ -91,6 +107,11 @@ func main() {
 	}()
 	signal.Notify(sigChan, syscall.SIGQUIT)
 
+	DoRun(os.Args)
+}
+
+// DoRun runs the app in a way that can be called for testing.
+func DoRun(args []string) error {
 	app := cli.NewApp()
 	app.Name = "fileinbox"
 	app.Usage = "Move files into the correct place, using their names."
@@ -99,12 +120,29 @@ func main() {
 		cli.StringFlag{
 			Name:  "root",
 			Usage: "Specifies the root directory.  Will be saved into ~/.config/fileinbox/fileinbox.yaml"},
+		cli.BoolFlag{
+			Name:   "skipconfig",
+			Usage:  "If set, we don't read or write configuration.  Meant for testing.",
+			Hidden: true,
+		},
 	}
-	app.Run(os.Args)
+	return app.Run(args)
+}
+
+func isDir(name string) bool {
+	fi, err := os.Stat(name)
+	if err != nil {
+		log.Printf("Unable to read %q: %v", name, err)
+		return false
+	}
+	return fi.IsDir()
 }
 
 func doFile(ctx *cli.Context) error {
-	config := &Config{}
+	skipconfig := ctx.Bool("skipconfig")
+	config := &Config{
+		persist: !skipconfig,
+	}
 	if err := config.read(); err != nil {
 		return err
 	}
@@ -121,6 +159,63 @@ func doFile(ctx *cli.Context) error {
 		}
 	}
 
-	log.Printf("Using root of %q", config.Root)
+	inbox := config.inbox()
+	if !isDir(inbox) {
+		log.Printf("%q does not appear to be a directory", inbox)
+		return os.ErrInvalid
+	}
+
+	files, err := ioutil.ReadDir(inbox)
+	if err != nil {
+		log.Printf("Unable to dir %q: %v", inbox, err)
+		return err
+	}
+
+	var okCount uint32
+	var failureCount uint32
+	missingDirs := map[string]bool{}
+
+	for _, file := range files {
+		b := file.Name()
+		// e.g. 20160822_dest.pdf or 20160822_dest_tag.pdf
+		tokens := strings.SplitN(b, "_", 3)
+
+		if len(tokens) < 2 {
+			log.Printf("Unable to parse %q, skipping", path.Join(inbox, b))
+			failureCount++
+			continue
+		}
+		ext := path.Ext(b)
+		dest := strings.TrimSuffix(tokens[1], ext)
+		dest = config.dest(dest)
+		if !isDir(dest) {
+			missingDirs[dest] = true
+			failureCount++
+			continue
+		}
+
+		oldPath := path.Join(inbox, b)
+		newPath := path.Join(dest, b)
+		err = os.Rename(oldPath, newPath)
+		if err != nil {
+			log.Printf("Unable to rename from %q to %q: %v", oldPath, newPath, err)
+			failureCount++
+			continue
+		}
+		okCount++
+	}
+
+	log.Printf("\n\n%d files moved.", okCount)
+	if len(missingDirs) != 0 {
+		log.Println("\n\nThe following directories are missing:")
+		for k := range missingDirs {
+			log.Printf("    %s", k)
+		}
+	}
+	if failureCount != 0 {
+		log.Printf("\n\nThere were %d failures", failureCount)
+		return fmt.Errorf("There were %d failures", failureCount)
+	}
+
 	return nil
 }

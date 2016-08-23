@@ -90,6 +90,10 @@ func readFiles(t *testing.T, root string) []string {
 	return found
 }
 
+func flagify(name string) string {
+	return fmt.Sprintf("--%s", name)
+}
+
 func TestSimple(t *testing.T) {
 	start := []string{
 		"filed/foo/",
@@ -121,8 +125,8 @@ func TestSimple(t *testing.T) {
 
 	args := []string{
 		"file_inbox",
-		"--root", root,
-		"--skipconfig",
+		flagify(rootFlag), root,
+		flagify(skipConfigFlag),
 	}
 	ok(t, newCli().Run(args))
 
@@ -169,8 +173,8 @@ func TestMissingDirs(t *testing.T) {
 
 	args := []string{
 		"file_inbox",
-		"--root", root,
-		"--skipconfig",
+		flagify(rootFlag), root,
+		flagify(skipConfigFlag),
 	}
 	app := newCli()
 	var result *fileResult
@@ -192,4 +196,55 @@ func TestMissingDirs(t *testing.T) {
 		path.Join(root, "filed", "gus"): true,
 	}
 	equals(t, expectedMissingDirs, result.missingDirs)
+}
+
+func TestForceDirs(t *testing.T) {
+	start := []string{
+		"filed/foo/",
+		"filed/bar/",
+		"inbox/20160701_foo.pdf",
+		"inbox/20160702_foo.pdf",
+		"inbox/20160702_bar.pdf",
+		"inbox/20160702_baz.pdf",
+		"inbox/20160703_baz.pdf",
+		"inbox/20160702_gus.pdf",
+	}
+	expected := []string{
+		"filed/",
+		"filed/foo/",
+		"filed/bar/",
+		"filed/baz/",
+		"filed/gus/",
+		"filed/foo/20160701_foo.pdf",
+		"filed/foo/20160702_foo.pdf",
+		"filed/bar/20160702_bar.pdf",
+		"filed/baz/20160702_baz.pdf",
+		"filed/baz/20160703_baz.pdf",
+		"filed/gus/20160702_gus.pdf",
+		"inbox/",
+	}
+
+	root, err := ioutil.TempDir("", "file_inbox_test")
+	ok(t, err)
+	defer func() {
+		if !t.Failed() {
+			// if the test failed, we leave this around for forensics
+			os.RemoveAll(root)
+		}
+	}()
+
+	createFiles(t, root, start)
+
+	args := []string{
+		"file_inbox",
+		flagify(rootFlag), root,
+		flagify(skipConfigFlag),
+		flagify(forceFlag),
+	}
+	ok(t, newCli().Run(args))
+
+	found := readFiles(t, root)
+	sort.Sort(sort.StringSlice(found))
+	sort.Sort(sort.StringSlice(expected))
+	equals(t, expected, found)
 }

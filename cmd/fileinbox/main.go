@@ -17,6 +17,12 @@ import (
 	"github.com/urfave/cli"
 )
 
+const (
+	rootFlag       string = "root"
+	skipConfigFlag        = "skipconfig"
+	forceFlag             = "force"
+)
+
 // Config represents some configuration we can store/read
 type Config struct {
 	persist bool
@@ -103,12 +109,16 @@ func newCli() *cli.App {
 	app.Action = doFile
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name:  "root",
+			Name:  rootFlag,
 			Usage: "Specifies the root directory.  Will be saved into ~/.config/fileinbox/fileinbox.yaml"},
 		cli.BoolFlag{
-			Name:   "skipconfig",
+			Name:   skipConfigFlag,
 			Usage:  "If set, we don't read or write configuration.  Meant for testing.",
 			Hidden: true,
+		},
+		cli.BoolFlag{
+			Name:  forceFlag,
+			Usage: "If set, we will create destination directories as needed.",
 		},
 	}
 	return app
@@ -149,6 +159,7 @@ func (fr fileResult) summarize() error {
 		for k := range fr.missingDirs {
 			log.Printf("    %s", k)
 		}
+		log.Printf("\n\nYou can automatically create the above directories but running this command again with the --%s flag", forceFlag)
 	}
 	if fr.failureCount != 0 {
 		log.Printf("\n\nThere were %d failures", fr.failureCount)
@@ -161,7 +172,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 	fr := fileResult{}
 	fr.missingDirs = map[string]bool{}
 
-	skipconfig := ctx.Bool("skipconfig")
+	skipconfig := ctx.Bool(skipConfigFlag)
 	config := &Config{
 		persist: !skipconfig,
 	}
@@ -169,13 +180,15 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		return fr, err
 	}
 
-	if ctx.String("root") == "" && config.Root == "" {
-		log.Print("You must use the --root flag to specify a root directory.  This will be stored for later use.")
+	force := ctx.Bool(forceFlag)
+
+	if ctx.String(rootFlag) == "" && config.Root == "" {
+		log.Printf("You must use the --%s flag to specify a root directory.  This will be stored for later use.", rootFlag)
 		return fr, nil
 	}
 
-	if ctx.String("root") != "" {
-		config.Root = ctx.String("root")
+	if ctx.String(rootFlag) != "" {
+		config.Root = ctx.String(rootFlag)
 		if err := config.write(); err != nil {
 			return fr, err
 		}
@@ -207,9 +220,16 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		dest := strings.TrimSuffix(tokens[1], ext)
 		dest = config.dest(dest)
 		if !isDir(dest) {
-			fr.missingDirs[dest] = true
-			fr.failureCount++
-			continue
+			if force {
+				if err = os.MkdirAll(dest, 0700); err != nil {
+					log.Printf("Failed creating dir for %s, %v", dest, err)
+					return fr, err
+				}
+			} else {
+				fr.missingDirs[dest] = true
+				fr.failureCount++
+				continue
+			}
 		}
 
 		oldPath := path.Join(inbox, b)

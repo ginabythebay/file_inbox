@@ -96,22 +96,7 @@ func (c *Config) dest(name string) string {
 	return path.Join(c.Root, "filed", name)
 }
 
-func main() {
-	sigChan := make(chan os.Signal)
-	go func() {
-		stacktrace := make([]byte, 8192)
-		for _ = range sigChan {
-			length := runtime.Stack(stacktrace, true)
-			fmt.Println(string(stacktrace[:length]))
-		}
-	}()
-	signal.Notify(sigChan, syscall.SIGQUIT)
-
-	DoRun(os.Args)
-}
-
-// DoRun runs the app in a way that can be called for testing.
-func DoRun(args []string) error {
+func newCli() *cli.App {
 	app := cli.NewApp()
 	app.Name = "fileinbox"
 	app.Usage = "Move files into the correct place, using their names."
@@ -126,13 +111,26 @@ func DoRun(args []string) error {
 			Hidden: true,
 		},
 	}
-	return app.Run(args)
+	return app
+}
+
+func main() {
+	sigChan := make(chan os.Signal)
+	go func() {
+		stacktrace := make([]byte, 8192)
+		for _ = range sigChan {
+			length := runtime.Stack(stacktrace, true)
+			fmt.Println(string(stacktrace[:length]))
+		}
+	}()
+	signal.Notify(sigChan, syscall.SIGQUIT)
+
+	newCli().Run(os.Args)
 }
 
 func isDir(name string) bool {
 	fi, err := os.Stat(name)
 	if err != nil {
-		log.Printf("Unable to read %q: %v", name, err)
 		return false
 	}
 	return fi.IsDir()

@@ -11,25 +11,9 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/urfave/cli"
 )
-
-var start = []string{
-	"filed/foo/",
-	"filed/bar/",
-	"inbox/20160701_foo.pdf",
-	"inbox/20160702_foo.pdf",
-	"inbox/20160702_bar.pdf",
-}
-
-var expected = []string{
-	"filed/",
-	"filed/foo/",
-	"filed/bar/",
-	"filed/foo/20160701_foo.pdf",
-	"filed/foo/20160702_foo.pdf",
-	"filed/bar/20160702_bar.pdf",
-	"inbox/",
-}
 
 // assert fails the test if the condition is false.
 func assert(tb testing.TB, condition bool, msg string, v ...interface{}) {
@@ -106,7 +90,24 @@ func readFiles(t *testing.T, root string) []string {
 	return found
 }
 
-func TestScenario(t *testing.T) {
+func TestSimple(t *testing.T) {
+	start := []string{
+		"filed/foo/",
+		"filed/bar/",
+		"inbox/20160701_foo.pdf",
+		"inbox/20160702_foo.pdf",
+		"inbox/20160702_bar.pdf",
+	}
+	expected := []string{
+		"filed/",
+		"filed/foo/",
+		"filed/bar/",
+		"filed/foo/20160701_foo.pdf",
+		"filed/foo/20160702_foo.pdf",
+		"filed/bar/20160702_bar.pdf",
+		"inbox/",
+	}
+
 	root, err := ioutil.TempDir("", "file_inbox_test")
 	ok(t, err)
 	defer func() {
@@ -123,10 +124,72 @@ func TestScenario(t *testing.T) {
 		"--root", root,
 		"--skipconfig",
 	}
-	ok(t, DoRun(args))
+	ok(t, newCli().Run(args))
 
 	found := readFiles(t, root)
 	sort.Sort(sort.StringSlice(found))
 	sort.Sort(sort.StringSlice(expected))
 	equals(t, expected, found)
+}
+
+func TestMissingDirs(t *testing.T) {
+	start := []string{
+		"filed/foo/",
+		"filed/bar/",
+		"inbox/20160701_foo.pdf",
+		"inbox/20160702_foo.pdf",
+		"inbox/20160702_bar.pdf",
+		"inbox/20160702_baz.pdf",
+		"inbox/20160703_baz.pdf",
+		"inbox/20160702_gus.pdf",
+	}
+	expectedFiles := []string{
+		"filed/",
+		"filed/foo/",
+		"filed/bar/",
+		"filed/foo/20160701_foo.pdf",
+		"filed/foo/20160702_foo.pdf",
+		"filed/bar/20160702_bar.pdf",
+		"inbox/",
+		"inbox/20160702_baz.pdf",
+		"inbox/20160703_baz.pdf",
+		"inbox/20160702_gus.pdf",
+	}
+
+	root, err := ioutil.TempDir("", "file_inbox_test")
+	ok(t, err)
+	defer func() {
+		if !t.Failed() {
+			// if the test failed, we leave this around for forensics
+			os.RemoveAll(root)
+		}
+	}()
+
+	createFiles(t, root, start)
+
+	args := []string{
+		"file_inbox",
+		"--root", root,
+		"--skipconfig",
+	}
+	app := newCli()
+	var result *fileResult
+	app.Action = func(ctx *cli.Context) error {
+		fr, err := doFileInner(ctx)
+		result = &fr
+		return err
+	}
+	ok(t, app.Run(args))
+	assert(t, result.summarize() != nil, "Expected failure, but got nil error")
+
+	foundFiles := readFiles(t, root)
+	sort.Sort(sort.StringSlice(foundFiles))
+	sort.Sort(sort.StringSlice(expectedFiles))
+	equals(t, expectedFiles, foundFiles)
+
+	expectedMissingDirs := map[string]bool{
+		path.Join(root, "filed", "baz"): true,
+		path.Join(root, "filed", "gus"): true,
+	}
+	equals(t, expectedMissingDirs, result.missingDirs)
 }

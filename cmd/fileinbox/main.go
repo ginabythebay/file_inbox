@@ -8,12 +8,15 @@ import (
 	"os/signal"
 	"os/user"
 	"path"
+	"regexp"
 	"runtime"
-	"strings"
+	"strconv"
 	"syscall"
+	"time"
 
 	yaml "gopkg.in/yaml.v2"
 
+	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
 
@@ -148,12 +151,15 @@ func isDir(name string) bool {
 
 type fileResult struct {
 	okCount      uint32
+	orgCount     uint32
+	orgDuration  time.Duration
 	failureCount uint32
 	missingDirs  map[string]bool
 }
 
-func (fr fileResult) summarize() error {
-	log.Printf("\n\n%d files moved.", fr.okCount)
+func (fr fileResult) summarize(duration time.Duration) error {
+	log.Printf("\n\n%d files moved in %s.", fr.okCount, duration)
+	log.Printf("\n\n%d files organized in %s.", fr.orgCount, fr.orgDuration)
 	if len(fr.missingDirs) != 0 {
 		log.Println("\n\nThe following directories are missing:")
 		for k := range fr.missingDirs {
@@ -208,21 +214,17 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 
 	for _, file := range files {
 		b := file.Name()
-		// e.g. 20160822_dest.pdf or 20160822_dest_tag.pdf
-		tokens := strings.SplitN(b, "_", 3)
-
-		if len(tokens) < 2 {
-			log.Printf("Unable to parse %q, skipping", path.Join(inbox, b))
+		parsed, err := parseFileName(b)
+		if err != nil {
+			log.Printf("Unable to parse %q, skipping: %+v", path.Join(inbox, b), err)
 			fr.failureCount++
 			continue
 		}
-		ext := path.Ext(b)
-		dest := strings.TrimSuffix(tokens[1], ext)
-		dest = config.dest(dest)
+		dest := config.dest(parsed.dest)
 		if !isDir(dest) {
 			if force {
 				if err = os.MkdirAll(dest, 0700); err != nil {
-					log.Printf("Failed creating dir for %s, %v", dest, err)
+					log.Printf("Failed creating dir for %s, %+v", dest, err)
 					return fr, err
 				}
 			} else {
@@ -232,8 +234,17 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 			}
 		}
 
+		orgStart := time.Now()
+		orgCount, err := organize(dest, parsed.year)
+		fr.orgDuration += time.Since(orgStart)
+		fr.orgCount += orgCount
+		if err != nil {
+			log.Printf("Failed organizing %q, %+v", dest, err)
+			return fr, err
+		}
+
 		oldPath := path.Join(inbox, b)
-		newPath := path.Join(dest, b)
+		newPath := path.Join(dest, parsed.year, b)
 		err = os.Rename(oldPath, newPath)
 		if err != nil {
 			log.Printf("Unable to rename from %q to %q: %v", oldPath, newPath, err)
@@ -246,10 +257,115 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 	return fr, nil
 }
 
+func organize(destDir string, year string) (cnt uint32, err error) {
+	dirsHave := map[string]bool{}
+	filesHave := []string{}
+	children, err := ioutil.ReadDir(destDir)
+	if err != nil {
+		return 0, errors.Wrap(err, "ReadDir")
+	}
+	for _, c := range children {
+		name := c.Name()
+		if c.IsDir() {
+			dirsHave[name] = true
+		} else {
+			filesHave = append(filesHave, name)
+		}
+	}
+
+	for _, f := range filesHave {
+		parsed, err := parseFileName(f)
+		if err != nil {
+			return 0, errors.Wrap(err, "organize")
+		}
+		if err = ensureHave(destDir, parsed.year, &dirsHave); err != nil {
+			return 0, errors.Wrap(err, "organize")
+		}
+		oldPath := path.Join(destDir, f)
+		newPath := path.Join(destDir, parsed.year, f)
+		err = os.Rename(oldPath, newPath)
+		if err != nil {
+			return 0, errors.Wrapf(err, "organizing %q", oldPath)
+		}
+		cnt++
+	}
+
+	if err = ensureHave(destDir, year, &dirsHave); err != nil {
+		return cnt, errors.Wrap(err, "organize")
+	}
+	return cnt, nil
+}
+
+func ensureHave(destDir string, year string, dirsHave *map[string]bool) error {
+	if (*dirsHave)[year] {
+		return nil
+	}
+	if err := os.Mkdir(path.Join(destDir, year), 0700); err != nil {
+		return errors.Wrap(err, "ensureHave")
+	}
+	(*dirsHave)[year] = true
+	return nil
+}
+
 func doFile(ctx *cli.Context) error {
+	start := time.Now()
 	fr, err := doFileInner(ctx)
 	if err != nil {
 		return err
 	}
-	return fr.summarize()
+	duration := time.Since(start)
+	return fr.summarize(duration)
+}
+
+type parsedName struct {
+	baseName string // e.g. 20160825_pge_taxes2016.pdf
+	year     string // e.g. 2016
+	month    string // e.g. 08
+	date     string // e.g. 25
+	dest     string // e.g. pge
+}
+
+var fileRe = regexp.MustCompile(`^(\d\d\d\d)(\d\d)(\d\d)_([^_\.]+).*$`)
+
+func parseFileName(baseName string) (*parsedName, error) {
+	matches := fileRe.FindStringSubmatch(baseName)
+	if matches == nil || len(matches) != 5 {
+		return nil, fmt.Errorf("Unable to parse %q.  We expect an 8 digit value like 20160825_pge_taxes2016.pdf or 20160825_pge.pdf", baseName)
+	}
+	year, month, date, dest := matches[1], matches[2], matches[3], matches[4]
+
+	if err := yearTest.verify(year); err != nil {
+		return nil, err
+	}
+	if err := monthTest.verify(month); err != nil {
+		return nil, err
+	}
+	if err := dateTest.verify(date); err != nil {
+		return nil, err
+	}
+
+	return &parsedName{baseName, year, month, date, dest}, nil
+}
+
+var (
+	yearTest  = unitTest{1, 9999, "year"}
+	monthTest = unitTest{1, 12, "month"}
+	dateTest  = unitTest{1, 31, "date"}
+)
+
+type unitTest struct {
+	min  int
+	max  int
+	unit string
+}
+
+func (ut unitTest) verify(s string) error {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	if i < ut.min || i > ut.max {
+		return fmt.Errorf("Unexpected %s %q.  We expect a value between %d and %d", ut.unit, s, ut.min, ut.max)
+	}
+	return nil
 }

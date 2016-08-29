@@ -99,16 +99,19 @@ func TestSimple(t *testing.T) {
 		"filed/foo/",
 		"filed/bar/",
 		"inbox/20160701_foo.pdf",
-		"inbox/20160702_foo.pdf",
+		"inbox/20150702_foo.pdf",
 		"inbox/20160702_bar.pdf",
 	}
 	expected := []string{
 		"filed/",
 		"filed/foo/",
+		"filed/foo/2015/",
+		"filed/foo/2016/",
 		"filed/bar/",
-		"filed/foo/20160701_foo.pdf",
-		"filed/foo/20160702_foo.pdf",
-		"filed/bar/20160702_bar.pdf",
+		"filed/bar/2016/",
+		"filed/foo/2016/20160701_foo.pdf",
+		"filed/foo/2015/20150702_foo.pdf",
+		"filed/bar/2016/20160702_bar.pdf",
 		"inbox/",
 	}
 
@@ -141,7 +144,7 @@ func TestMissingDirs(t *testing.T) {
 		"filed/foo/",
 		"filed/bar/",
 		"inbox/20160701_foo.pdf",
-		"inbox/20160702_foo.pdf",
+		"inbox/20150702_foo.pdf",
 		"inbox/20160702_bar.pdf",
 		"inbox/20160702_baz.pdf",
 		"inbox/20160703_baz.pdf",
@@ -150,10 +153,13 @@ func TestMissingDirs(t *testing.T) {
 	expectedFiles := []string{
 		"filed/",
 		"filed/foo/",
+		"filed/foo/2015/",
+		"filed/foo/2016/",
 		"filed/bar/",
-		"filed/foo/20160701_foo.pdf",
-		"filed/foo/20160702_foo.pdf",
-		"filed/bar/20160702_bar.pdf",
+		"filed/bar/2016/",
+		"filed/foo/2016/20160701_foo.pdf",
+		"filed/foo/2015/20150702_foo.pdf",
+		"filed/bar/2016/20160702_bar.pdf",
 		"inbox/",
 		"inbox/20160702_baz.pdf",
 		"inbox/20160703_baz.pdf",
@@ -184,7 +190,7 @@ func TestMissingDirs(t *testing.T) {
 		return err
 	}
 	ok(t, app.Run(args))
-	assert(t, result.summarize() != nil, "Expected failure, but got nil error")
+	assert(t, result.summarize(0) != nil, "Expected failure, but got nil error")
 
 	foundFiles := readFiles(t, root)
 	sort.Sort(sort.StringSlice(foundFiles))
@@ -203,7 +209,7 @@ func TestForceDirs(t *testing.T) {
 		"filed/foo/",
 		"filed/bar/",
 		"inbox/20160701_foo.pdf",
-		"inbox/20160702_foo.pdf",
+		"inbox/20150702_foo.pdf",
 		"inbox/20160702_bar.pdf",
 		"inbox/20160702_baz.pdf",
 		"inbox/20160703_baz.pdf",
@@ -212,15 +218,20 @@ func TestForceDirs(t *testing.T) {
 	expected := []string{
 		"filed/",
 		"filed/foo/",
+		"filed/foo/2015/",
+		"filed/foo/2016/",
 		"filed/bar/",
+		"filed/bar/2016/",
 		"filed/baz/",
+		"filed/baz/2016/",
 		"filed/gus/",
-		"filed/foo/20160701_foo.pdf",
-		"filed/foo/20160702_foo.pdf",
-		"filed/bar/20160702_bar.pdf",
-		"filed/baz/20160702_baz.pdf",
-		"filed/baz/20160703_baz.pdf",
-		"filed/gus/20160702_gus.pdf",
+		"filed/gus/2016/",
+		"filed/foo/2016/20160701_foo.pdf",
+		"filed/foo/2015/20150702_foo.pdf",
+		"filed/bar/2016/20160702_bar.pdf",
+		"filed/baz/2016/20160702_baz.pdf",
+		"filed/baz/2016/20160703_baz.pdf",
+		"filed/gus/2016/20160702_gus.pdf",
 		"inbox/",
 	}
 

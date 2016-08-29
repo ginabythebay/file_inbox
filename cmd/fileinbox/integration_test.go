@@ -139,6 +139,48 @@ func TestSimple(t *testing.T) {
 	equals(t, expected, found)
 }
 
+func TestOrganize(t *testing.T) {
+	start := []string{
+		"filed/foo/",
+		"filed/foo/20150701_foo.pdf",
+		"filed/foo/20160702_foo.pdf",
+		"inbox/20160703_foo.pdf",
+	}
+	expected := []string{
+		"filed/",
+		"filed/foo/",
+		"filed/foo/2015/",
+		"filed/foo/2016/",
+		"filed/foo/2015/20150701_foo.pdf",
+		"filed/foo/2016/20160702_foo.pdf",
+		"filed/foo/2016/20160703_foo.pdf",
+		"inbox/",
+	}
+
+	root, err := ioutil.TempDir("", "file_inbox_test")
+	ok(t, err)
+	defer func() {
+		if !t.Failed() {
+			// if the test failed, we leave this around for forensics
+			os.RemoveAll(root)
+		}
+	}()
+
+	createFiles(t, root, start)
+
+	args := []string{
+		"file_inbox",
+		flagify(rootFlag), root,
+		flagify(skipConfigFlag),
+	}
+	ok(t, newCli().Run(args))
+
+	found := readFiles(t, root)
+	sort.Sort(sort.StringSlice(found))
+	sort.Sort(sort.StringSlice(expected))
+	equals(t, expected, found)
+}
+
 func TestMissingDirs(t *testing.T) {
 	start := []string{
 		"filed/foo/",

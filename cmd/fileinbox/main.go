@@ -165,7 +165,7 @@ func (fr fileResult) summarize(duration time.Duration) error {
 		for k := range fr.missingDirs {
 			log.Printf("    %s", k)
 		}
-		log.Printf("\n\nYou can automatically create the above directories but running this command again with the --%s flag", forceFlag)
+		log.Printf("\n\nYou can automatically create the above directories by running this command again with the --%s flag", forceFlag)
 	}
 	if fr.failureCount != 0 {
 		log.Printf("\n\nThere were %d failures", fr.failureCount)

@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/signal"
 	"os/user"
@@ -35,7 +34,7 @@ type Config struct {
 func (c *Config) path() (string, error) {
 	usr, err := user.Current()
 	if err != nil {
-		log.Printf("Unable to determine home directory: %v", err)
+		fmt.Printf("Unable to determine home directory: %+v", err)
 		return "", err
 	}
 
@@ -56,13 +55,13 @@ func (c *Config) read() error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		log.Printf("Failed to read %q due to %v", p, err)
+		fmt.Printf("Failed to read %q due to %+v", p, err)
 		return err
 	}
 
 	err = yaml.Unmarshal(bytes, c)
 	if err != nil {
-		log.Printf("Failed to unmarshal %q: %v", string(bytes), err)
+		fmt.Printf("Failed to unmarshal %q: %+v", string(bytes), err)
 	}
 	return err
 }
@@ -78,19 +77,19 @@ func (c *Config) write() error {
 
 	bytes, err := yaml.Marshal(c)
 	if err != nil {
-		log.Printf("Failed to marshal %#v: %v", c, err)
+		fmt.Printf("Failed to marshal %#v: %+v", c, err)
 		return err
 	}
 
 	err = os.MkdirAll(path.Dir(p), 0500)
 	if err != nil {
-		log.Printf("Failed to create directory %q, %v", path.Dir(p), err)
+		fmt.Printf("Failed to create directory %q, %+v", path.Dir(p), err)
 		return err
 	}
 
 	err = ioutil.WriteFile(p, bytes, 0600)
 	if err != nil {
-		log.Printf("Failed to write %q due to %v", p, err)
+		fmt.Printf("Failed to write %q due to %+v", p, err)
 		return err
 	}
 
@@ -158,17 +157,17 @@ type fileResult struct {
 }
 
 func (fr fileResult) summarize(duration time.Duration) error {
-	log.Printf("\n\n%d files moved in %s.", fr.okCount, duration)
-	log.Printf("\n\n%d files organized in %s.", fr.orgCount, fr.orgDuration)
+	fmt.Printf("\n\n%d files moved in %s.", fr.okCount, duration)
+	fmt.Printf("\n\n%d files organized in %s.", fr.orgCount, fr.orgDuration)
 	if len(fr.missingDirs) != 0 {
-		log.Println("\n\nThe following directories are missing:")
+		fmt.Println("\n\nThe following directories are missing:")
 		for k := range fr.missingDirs {
-			log.Printf("    %s", k)
+			fmt.Printf("    %s", k)
 		}
-		log.Printf("\n\nYou can automatically create the above directories by running this command again with the --%s flag", forceFlag)
+		fmt.Printf("\n\nYou can automatically create the above directories by running this command again with the --%s flag", forceFlag)
 	}
 	if fr.failureCount != 0 {
-		log.Printf("\n\nThere were %d failures", fr.failureCount)
+		fmt.Printf("\n\nThere were %d failures", fr.failureCount)
 		return fmt.Errorf("There were %d failures", fr.failureCount)
 	}
 	return nil
@@ -189,7 +188,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 	force := ctx.Bool(forceFlag)
 
 	if ctx.String(rootFlag) == "" && config.Root == "" {
-		log.Printf("You must use the --%s flag to specify a root directory.  This will be stored for later use.", rootFlag)
+		fmt.Printf("You must use the --%s flag to specify a root directory.  This will be stored for later use.", rootFlag)
 		return fr, nil
 	}
 
@@ -202,13 +201,13 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 
 	inbox := config.inbox()
 	if !isDir(inbox) {
-		log.Printf("%q does not appear to be a directory", inbox)
+		fmt.Printf("%q does not appear to be a directory", inbox)
 		return fr, os.ErrInvalid
 	}
 
 	files, err := ioutil.ReadDir(inbox)
 	if err != nil {
-		log.Printf("Unable to dir %q: %v", inbox, err)
+		fmt.Printf("Unable to dir %q: %+v", inbox, err)
 		return fr, err
 	}
 
@@ -216,7 +215,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		b := file.Name()
 		parsed, err := parseFileName(b)
 		if err != nil {
-			log.Printf("Unable to parse %q, skipping: %+v", path.Join(inbox, b), err)
+			fmt.Printf("Unable to parse %q, skipping: %+v", path.Join(inbox, b), err)
 			fr.failureCount++
 			continue
 		}
@@ -224,7 +223,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		if !isDir(dest) {
 			if force {
 				if err = os.MkdirAll(dest, 0700); err != nil {
-					log.Printf("Failed creating dir for %s, %+v", dest, err)
+					fmt.Printf("Failed creating dir for %s, %+v", dest, err)
 					return fr, err
 				}
 			} else {
@@ -239,7 +238,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		fr.orgDuration += time.Since(orgStart)
 		fr.orgCount += orgCount
 		if err != nil {
-			log.Printf("Failed organizing %q, %+v", dest, err)
+			fmt.Printf("Failed organizing %q, %+v", dest, err)
 			return fr, err
 		}
 
@@ -247,7 +246,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		newPath := path.Join(dest, parsed.year, b)
 		err = os.Rename(oldPath, newPath)
 		if err != nil {
-			log.Printf("Unable to rename from %q to %q: %v", oldPath, newPath, err)
+			fmt.Printf("Unable to rename from %q to %q: %+v", oldPath, newPath, err)
 			fr.failureCount++
 			continue
 		}

@@ -313,7 +313,17 @@ func doFile(ctx *cli.Context) error {
 		return err
 	}
 	duration := time.Since(start)
-	return fr.summarize(duration)
+	summarizeErr := fr.summarize(duration)
+	return anyError(err, summarizeErr)
+}
+
+func anyError(errs ...error) error {
+	for _, e := range errs {
+		if e != nil {
+			return e
+		}
+	}
+	return nil
 }
 
 type parsedName struct {

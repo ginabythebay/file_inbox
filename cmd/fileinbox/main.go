@@ -170,6 +170,7 @@ func (fr fileResult) summarize(duration time.Duration) error {
 		fmt.Printf("\n\nThere were %d failures", fr.failureCount)
 		return fmt.Errorf("There were %d failures", fr.failureCount)
 	}
+	fmt.Println()
 	return nil
 }
 

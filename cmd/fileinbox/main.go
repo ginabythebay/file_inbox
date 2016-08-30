@@ -173,6 +173,38 @@ func (fr fileResult) summarize(duration time.Duration) error {
 	return nil
 }
 
+type accum map[string]map[string]bool
+
+func newAccum() accum {
+	return map[string]map[string]bool{}
+}
+
+func (a accum) add(dest string, year string) {
+	yearSet, ok := a[dest]
+	if ok {
+		yearSet[year] = true
+	} else {
+		a[dest] = map[string]bool{year: true}
+	}
+}
+
+type destNeeds struct {
+	dest  string
+	years []string
+}
+
+func (a accum) iter() []destNeeds {
+	var result []destNeeds
+	for dest, yearSet := range a {
+		var years []string
+		for year := range yearSet {
+			years = append(years, year)
+		}
+		result = append(result, destNeeds{dest, years})
+	}
+	return result
+}
+
 func doFileInner(ctx *cli.Context) (fileResult, error) {
 	fr := fileResult{}
 	fr.missingDirs = map[string]bool{}
@@ -211,6 +243,9 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		return fr, err
 	}
 
+	// figure out what we are working on
+	allParsed := []*parsedName{}
+	acc := newAccum()
 	for _, file := range files {
 		b := file.Name()
 		parsed, err := parseFileName(force, b)
@@ -219,7 +254,13 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 			fr.failureCount++
 			continue
 		}
-		dest := config.dest(parsed.dest)
+		allParsed = append(allParsed, parsed)
+		acc.add(parsed.dest, parsed.year)
+	}
+
+	// make sure destination directories are ready
+	for _, dn := range acc.iter() {
+		dest := config.dest(dn.dest)
 		if !isDir(dest) {
 			if force {
 				if err = os.MkdirAll(dest, 0700); err != nil {
@@ -234,16 +275,19 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		}
 
 		orgStart := time.Now()
-		orgCount, err := organize(force, dest, parsed.year)
+		orgCount, err := organize(force, dest, dn.years)
 		fr.orgDuration += time.Since(orgStart)
 		fr.orgCount += orgCount
 		if err != nil {
 			fmt.Printf("Failed organizing %q, %+v", dest, err)
 			return fr, err
 		}
+	}
 
-		oldPath := path.Join(inbox, b)
-		newPath := path.Join(dest, parsed.year, b)
+	// move the inbox files into place
+	for _, parsed := range allParsed {
+		oldPath := path.Join(inbox, parsed.baseName)
+		newPath := path.Join(config.dest(parsed.dest), parsed.year, parsed.baseName)
 		err = os.Rename(oldPath, newPath)
 		if err != nil {
 			fmt.Printf("Unable to rename from %q to %q: %+v", oldPath, newPath, err)
@@ -256,7 +300,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 	return fr, nil
 }
 
-func organize(force bool, destDir string, year string) (cnt uint32, err error) {
+func organize(force bool, destDir string, years []string) (cnt uint32, err error) {
 	dirsHave := map[string]bool{}
 	filesHave := []string{}
 	children, err := ioutil.ReadDir(destDir)
@@ -289,8 +333,10 @@ func organize(force bool, destDir string, year string) (cnt uint32, err error) {
 		cnt++
 	}
 
-	if err = ensureHave(destDir, year, &dirsHave); err != nil {
-		return cnt, errors.Wrap(err, "organize")
+	for _, y := range years {
+		if err = ensureHave(destDir, y, &dirsHave); err != nil {
+			return cnt, errors.Wrap(err, "organize")
+		}
 	}
 	return cnt, nil
 }

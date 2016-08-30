@@ -213,7 +213,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 
 	for _, file := range files {
 		b := file.Name()
-		parsed, err := parseFileName(b)
+		parsed, err := parseFileName(force, b)
 		if err != nil {
 			fmt.Printf("Unable to parse %q, skipping: %+v", path.Join(inbox, b), err)
 			fr.failureCount++
@@ -234,7 +234,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		}
 
 		orgStart := time.Now()
-		orgCount, err := organize(dest, parsed.year)
+		orgCount, err := organize(force, dest, parsed.year)
 		fr.orgDuration += time.Since(orgStart)
 		fr.orgCount += orgCount
 		if err != nil {
@@ -256,7 +256,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 	return fr, nil
 }
 
-func organize(destDir string, year string) (cnt uint32, err error) {
+func organize(force bool, destDir string, year string) (cnt uint32, err error) {
 	dirsHave := map[string]bool{}
 	filesHave := []string{}
 	children, err := ioutil.ReadDir(destDir)
@@ -273,7 +273,7 @@ func organize(destDir string, year string) (cnt uint32, err error) {
 	}
 
 	for _, f := range filesHave {
-		parsed, err := parseFileName(f)
+		parsed, err := parseFileName(force, f)
 		if err != nil {
 			return 0, errors.Wrap(err, "organize")
 		}
@@ -326,20 +326,25 @@ type parsedName struct {
 
 var fileRe = regexp.MustCompile(`^(\d\d\d\d)(\d\d)(\d\d)_([^_\.]+).*$`)
 
-func parseFileName(baseName string) (*parsedName, error) {
+func parseFileName(force bool, baseName string) (*parsedName, error) {
 	matches := fileRe.FindStringSubmatch(baseName)
 	if matches == nil || len(matches) != 5 {
 		return nil, fmt.Errorf("Unable to parse %q.  We expect an 8 digit value like 20160825_pge_taxes2016.pdf or 20160825_pge.pdf", baseName)
 	}
 	year, month, date, dest := matches[1], matches[2], matches[3], matches[4]
 
-	if err := yearTest.verify(year); err != nil {
+	yearVal, err := yearTest.verify(year)
+	if err != nil {
 		return nil, err
 	}
-	if err := monthTest.verify(month); err != nil {
+	yearDiff := yearVal - time.Now().Year()
+	if !force && yearDiff > 2 {
+		return nil, fmt.Errorf("%s is %d years in the future, which is highly suspect.  To continue, set the --force flag", baseName, yearDiff)
+	}
+	if _, err := monthTest.verify(month); err != nil {
 		return nil, err
 	}
-	if err := dateTest.verify(date); err != nil {
+	if _, err := dateTest.verify(date); err != nil {
 		return nil, err
 	}
 
@@ -358,13 +363,13 @@ type unitTest struct {
 	unit string
 }
 
-func (ut unitTest) verify(s string) error {
-	i, err := strconv.Atoi(s)
+func (ut unitTest) verify(s string) (i int, err error) {
+	i, err = strconv.Atoi(s)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if i < ut.min || i > ut.max {
-		return fmt.Errorf("Unexpected %s %q.  We expect a value between %d and %d", ut.unit, s, ut.min, ut.max)
+		return 0, fmt.Errorf("Unexpected %s %q.  We expect a value between %d and %d", ut.unit, s, ut.min, ut.max)
 	}
-	return nil
+	return i, nil
 }

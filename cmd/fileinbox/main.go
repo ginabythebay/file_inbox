@@ -215,33 +215,30 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		persist: !skipconfig,
 	}
 	if err := config.read(); err != nil {
-		return fr, err
+		return fr, errors.Wrap(err, "doFileInner")
 	}
 
 	force := ctx.Bool(forceFlag)
 
 	if ctx.String(rootFlag) == "" && config.Root == "" {
-		fmt.Printf("You must use the --%s flag to specify a root directory.  This will be stored for later use.", rootFlag)
-		return fr, nil
+		return fr, errors.Errorf("You must use the --%s flag to specify a root directory.  This will be stored for later use.", rootFlag)
 	}
 
 	if ctx.String(rootFlag) != "" {
 		config.Root = ctx.String(rootFlag)
 		if err := config.write(); err != nil {
-			return fr, err
+			return fr, errors.Wrap(err, "writing config")
 		}
 	}
 
 	inbox := config.inbox()
 	if !isDir(inbox) {
-		fmt.Printf("%q does not appear to be a directory", inbox)
-		return fr, os.ErrInvalid
+		return fr, errors.Errorf("%q does not appear to be a directory", inbox)
 	}
 
 	files, err := ioutil.ReadDir(inbox)
 	if err != nil {
-		fmt.Printf("Unable to dir %q: %+v", inbox, err)
-		return fr, err
+		return fr, errors.Wrapf(err, "Unable to dir %q", inbox)
 	}
 
 	// figure out what we are working on
@@ -265,8 +262,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		if !isDir(dest) {
 			if force {
 				if err = os.MkdirAll(dest, 0700); err != nil {
-					fmt.Printf("Failed creating dir for %s, %+v", dest, err)
-					return fr, err
+					return fr, errors.Wrapf(err, "Failed creating dir for %s", dest)
 				}
 			} else {
 				fr.missingDirs[dest] = true
@@ -280,8 +276,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		fr.orgDuration += time.Since(orgStart)
 		fr.orgCount += orgCount
 		if err != nil {
-			fmt.Printf("Failed organizing %q, %+v", dest, err)
-			return fr, err
+			return fr, errors.Wrapf(err, "Failed organizing %q", dest)
 		}
 	}
 
@@ -356,11 +351,11 @@ func ensureHave(destDir string, year string, dirsHave *map[string]bool) error {
 func doFile(ctx *cli.Context) error {
 	start := time.Now()
 	fr, err := doFileInner(ctx)
-	if err != nil {
-		return err
-	}
 	duration := time.Since(start)
 	summarizeErr := fr.summarize(duration)
+	if err != nil {
+		fmt.Printf("\n\nError: %+v", err)
+	}
 	return anyError(err, summarizeErr)
 }
 

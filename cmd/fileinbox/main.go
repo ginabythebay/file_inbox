@@ -301,7 +301,7 @@ func organize(force bool, destDir string, years []string) (cnt uint32, err error
 	filesHave := []string{}
 	children, err := ioutil.ReadDir(destDir)
 	if err != nil {
-		return 0, errors.Wrap(err, "ReadDir")
+		return cnt, errors.Wrap(err, "ReadDir")
 	}
 	for _, c := range children {
 		name := c.Name()
@@ -315,16 +315,16 @@ func organize(force bool, destDir string, years []string) (cnt uint32, err error
 	for _, f := range filesHave {
 		parsed, err := parseFileName(force, f)
 		if err != nil {
-			return 0, errors.Wrap(err, "organize")
+			return cnt, errors.Wrap(err, "organize")
 		}
 		if err = ensureHave(destDir, parsed.year, &dirsHave); err != nil {
-			return 0, errors.Wrap(err, "organize")
+			return cnt, errors.Wrap(err, "organize")
 		}
 		oldPath := path.Join(destDir, f)
 		newPath := path.Join(destDir, parsed.year, f)
 		err = os.Rename(oldPath, newPath)
 		if err != nil {
-			return 0, errors.Wrapf(err, "organizing %q", oldPath)
+			return cnt, errors.Wrapf(err, "organizing %q", oldPath)
 		}
 		cnt++
 	}

@@ -167,7 +167,6 @@ func (fr fileResult) summarize(duration time.Duration) error {
 		fmt.Printf("\n\nYou can automatically create the above directories by running this command again with the --%s flag", forceFlag)
 	}
 	if fr.failureCount != 0 {
-		fmt.Printf("\n\nThere were %d failures", fr.failureCount)
 		return fmt.Errorf("There were %d failures", fr.failureCount)
 	}
 	fmt.Println()

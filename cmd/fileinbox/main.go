@@ -162,7 +162,7 @@ func (fr fileResult) summarize(duration time.Duration) error {
 	if len(fr.missingDirs) != 0 {
 		fmt.Println("\n\nThe following directories are missing:")
 		for k := range fr.missingDirs {
-			fmt.Printf("    %s", k)
+			fmt.Printf("    %s\n", k)
 		}
 		fmt.Printf("\n\nYou can automatically create the above directories by running this command again with the --%s flag", forceFlag)
 	}
@@ -281,12 +281,15 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 
 	// move the inbox files into place
 	for _, parsed := range allParsed {
+		dest := config.dest(parsed.dest)
 		oldPath := path.Join(inbox, parsed.baseName)
-		newPath := path.Join(config.dest(parsed.dest), parsed.year, parsed.baseName)
+		newPath := path.Join(dest, parsed.year, parsed.baseName)
 		err = os.Rename(oldPath, newPath)
 		if err != nil {
 			fmt.Printf("Unable to rename from %q to %q: %+v", oldPath, newPath, err)
-			fr.failureCount++
+			if !fr.missingDirs[dest] {
+				fr.failureCount++
+			}
 			continue
 		}
 		fr.okCount++

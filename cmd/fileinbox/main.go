@@ -279,19 +279,22 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		}
 	}
 
+	tasks := len(allParsed)
+
 	// move the inbox files into place
-	for _, parsed := range allParsed {
+	for i, parsed := range allParsed {
 		dest := config.dest(parsed.dest)
 		oldPath := path.Join(inbox, parsed.baseName)
 		newPath := path.Join(dest, parsed.year, parsed.baseName)
 		err = os.Rename(oldPath, newPath)
 		if err != nil {
-			fmt.Printf("Unable to rename from %q to %q: %+v", oldPath, newPath, err)
+			fmt.Printf("Unable to rename from %q to %q: %+v\n", oldPath, newPath, err)
 			if !fr.missingDirs[dest] {
 				fr.failureCount++
 			}
 			continue
 		}
+		fmt.Printf("(%d/%d) Filed\r", i+1, tasks)
 		fr.okCount++
 	}
 

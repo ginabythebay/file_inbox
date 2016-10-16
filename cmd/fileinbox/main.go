@@ -158,7 +158,7 @@ type fileResult struct {
 
 func (fr fileResult) summarize(duration time.Duration) error {
 	fmt.Printf("\n\n%d files moved in %s.", fr.okCount, duration)
-	fmt.Printf("\n\n%d files organized in %s.", fr.orgCount, fr.orgDuration)
+	fmt.Printf("\n\n%d directories organized in %s.", fr.orgCount, fr.orgDuration)
 	if len(fr.missingDirs) != 0 {
 		fmt.Println("\n\nThe following directories are missing:")
 		for k := range fr.missingDirs {
@@ -297,6 +297,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		fmt.Printf("(%d/%d) Filed\r", i+1, tasks)
 		fr.okCount++
 	}
+	fmt.Print(" \n")
 
 	return fr, nil
 }

@@ -299,6 +299,8 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 }
 
 func organize(force bool, destDir string, years []string) (cnt uint32, err error) {
+	start := time.Now()
+
 	dirsHave := map[string]bool{}
 	filesHave := []string{}
 	children, err := ioutil.ReadDir(destDir)
@@ -314,7 +316,11 @@ func organize(force bool, destDir string, years []string) (cnt uint32, err error
 		}
 	}
 
-	for _, f := range filesHave {
+	// Amount of work we need to do.  We don't count the years work as
+	// it often will be a nop (the directory will often already exists)
+	tasks := len(filesHave)
+
+	for i, f := range filesHave {
 		parsed, err := parseFileName(force, f)
 		if err != nil {
 			return cnt, errors.Wrap(err, "organize")
@@ -329,6 +335,7 @@ func organize(force bool, destDir string, years []string) (cnt uint32, err error
 			return cnt, errors.Wrapf(err, "organizing %q", oldPath)
 		}
 		cnt++
+		fmt.Printf("(%d/%d) organizing %s\r", i+1, tasks, destDir)
 	}
 
 	for _, y := range years {
@@ -336,6 +343,11 @@ func organize(force bool, destDir string, years []string) (cnt uint32, err error
 			return cnt, errors.Wrap(err, "organize")
 		}
 	}
+
+	if tasks != 0 {
+		fmt.Printf("Organized %s in %s\n", destDir, time.Since(start))
+	}
+
 	return cnt, nil
 }
 

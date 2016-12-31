@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -20,9 +21,10 @@ import (
 )
 
 const (
-	rootFlag       string = "root"
-	skipConfigFlag        = "skipconfig"
-	forceFlag             = "force"
+	rootFlag         string = "root"
+	skipConfigFlag          = "skipconfig"
+	forceFlag               = "force"
+	extraInboxesFlag        = "extraInboxes"
 )
 
 // Config represents some configuration we can store/read
@@ -121,6 +123,10 @@ func newCli() *cli.App {
 		cli.BoolFlag{
 			Name:  forceFlag,
 			Usage: "If set, we will create destination directories as needed.",
+		},
+		cli.StringSliceFlag{
+			Name:  extraInboxesFlag,
+			Usage: "If set, these additional directories will be treated as inboxes to process",
 		},
 	}
 	return app
@@ -230,14 +236,25 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		}
 	}
 
-	inbox := config.inbox()
+	allInboxes := []string{config.inbox()}
+	allInboxes = append(allInboxes, ctx.StringSlice(extraInboxesFlag)...)
+	for _, inbox := range allInboxes {
+		if err := processInbox(inbox, config, force, &fr); err != nil {
+			return fr, errors.Wrapf(err, "processing %s", inbox)
+		}
+	}
+
+	return fr, nil
+}
+
+func processInbox(inbox string, config *Config, force bool, fr *fileResult) error {
 	if !isDir(inbox) {
-		return fr, errors.Errorf("%q does not appear to be a directory", inbox)
+		return errors.Errorf("%q does not appear to be a directory", inbox)
 	}
 
 	files, err := ioutil.ReadDir(inbox)
 	if err != nil {
-		return fr, errors.Wrapf(err, "Unable to dir %q", inbox)
+		return errors.Wrapf(err, "Unable to dir %q", inbox)
 	}
 
 	// figure out what we are working on
@@ -262,7 +279,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		if !isDir(dest) {
 			if force {
 				if err = os.MkdirAll(dest, 0700); err != nil {
-					return fr, errors.Wrapf(err, "Failed creating dir for %s", dest)
+					return errors.Wrapf(err, "Failed creating dir for %s", dest)
 				}
 			} else {
 				fr.missingDirs[dest] = true
@@ -277,7 +294,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		fr.orgDuration += time.Since(orgStart)
 		fr.orgCount += orgCount
 		if err != nil {
-			return fr, errors.Wrapf(err, "Failed organizing %q", dest)
+			return errors.Wrapf(err, "Failed organizing %q", dest)
 		}
 	}
 
@@ -288,7 +305,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		dest := config.dest(parsed.dest)
 		oldPath := path.Join(inbox, parsed.baseName)
 		newPath := path.Join(dest, parsed.year, parsed.baseName)
-		err = os.Rename(oldPath, newPath)
+		err = move(oldPath, newPath)
 		if err != nil {
 			fmt.Printf("Unable to rename from %q to %q: %+v\n", oldPath, newPath, err)
 			if !fr.missingDirs[dest] {
@@ -301,7 +318,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 	}
 	fmt.Print(" \n")
 
-	return fr, nil
+	return nil
 }
 
 func organize(force bool, destDir string, years []string) (cnt uint32, err error) {
@@ -337,7 +354,7 @@ func organize(force bool, destDir string, years []string) (cnt uint32, err error
 		}
 		oldPath := path.Join(destDir, f)
 		newPath := path.Join(destDir, parsed.year, f)
-		err = os.Rename(oldPath, newPath)
+		err = move(oldPath, newPath)
 		if err != nil {
 			return cnt, errors.Wrapf(err, "organizing %q", oldPath)
 		}
@@ -356,6 +373,46 @@ func organize(force bool, destDir string, years []string) (cnt uint32, err error
 	}
 
 	return cnt, nil
+}
+
+func move(fromName, toName string) error {
+	err := os.Rename(fromName, toName)
+	if err == nil {
+		return nil
+	}
+	if _, ok := err.(*os.LinkError); !ok {
+		return err
+	}
+
+	var from, to *os.File
+	defer func() {
+		if from != nil {
+			from.Close()
+		}
+		if to != nil {
+			closeError := to.Close()
+			if err == nil {
+				err = closeError
+			}
+		}
+
+		if err == nil {
+			err = os.Remove(fromName)
+		} else {
+			os.Remove(toName)
+		}
+	}()
+
+	from, err = os.Open(fromName)
+	if err != nil {
+		return err
+	}
+	to, err = os.OpenFile(toName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(to, from)
+	return err
 }
 
 func ensureHave(destDir string, year string, dirsHave *map[string]bool) error {

@@ -245,7 +245,8 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 	acc := newAccum()
 	for _, file := range files {
 		b := file.Name()
-		parsed, err := parseFileName(force, b)
+		var parsed *parsedName
+		parsed, err = parseFileName(force, b)
 		if err != nil {
 			fmt.Printf("Unable to parse %q, skipping: %+v", path.Join(inbox, b), err)
 			fr.failureCount++
@@ -271,7 +272,8 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		}
 
 		orgStart := time.Now()
-		orgCount, err := organize(force, dest, dn.years)
+		var orgCount uint32
+		orgCount, err = organize(force, dest, dn.years)
 		fr.orgDuration += time.Since(orgStart)
 		fr.orgCount += orgCount
 		if err != nil {
@@ -325,7 +327,8 @@ func organize(force bool, destDir string, years []string) (cnt uint32, err error
 	tasks := len(filesHave)
 
 	for i, f := range filesHave {
-		parsed, err := parseFileName(force, f)
+		var parsed *parsedName
+		parsed, err = parseFileName(force, f)
 		if err != nil {
 			return cnt, errors.Wrap(err, "organize")
 		}

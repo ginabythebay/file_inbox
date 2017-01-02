@@ -31,6 +31,10 @@ const (
 type Config struct {
 	persist bool
 	Root    string
+	CC      struct {
+		Root  string
+		Dests []string
+	}
 }
 
 func (c *Config) path() (string, error) {
@@ -96,6 +100,18 @@ func (c *Config) write() error {
 	}
 
 	return nil
+}
+
+func (c *Config) ccDest(dest string) string {
+	if c.CC.Root == "" {
+		return ""
+	}
+	for _, d := range c.CC.Dests {
+		if d == dest {
+			return path.Join(c.CC.Root, d)
+		}
+	}
+	return ""
 }
 
 func (c *Config) inbox() string {
@@ -313,12 +329,57 @@ func processInbox(inbox string, config *Config, force bool, fr *fileResult) erro
 			}
 			continue
 		}
+		cc(config, inbox, parsed)
 		fmt.Printf("(%d/%d) Filed\r", i+1, tasks)
 		fr.okCount++
 	}
 	fmt.Print(" \n")
 
 	return nil
+}
+
+func cc(config *Config, inbox string, parsed *parsedName) error {
+	dest := config.ccDest(parsed.dest)
+	if dest == "" {
+		return nil
+	}
+	dest = path.Join(dest, parsed.year)
+	if !isDir(dest) {
+		if err := os.Mkdir(dest, 0700); err != nil {
+			return errors.Wrapf(err, "Failed creating dir for %s", dest)
+		}
+	}
+
+	src := path.Join(inbox, parsed.baseName)
+	dest = path.Join(dest, parsed.baseName)
+	return copyFile(src, dest)
+}
+
+func copyFile(src, dest string) error {
+	var from, to *os.File
+	var err error
+	defer func() {
+		if from != nil {
+			from.Close()
+		}
+		if to != nil {
+			closeError := to.Close()
+			if err == nil {
+				err = closeError
+			}
+		}
+	}()
+
+	from, err = os.Open(src)
+	if err != nil {
+		return err
+	}
+	to, err = os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(to, from)
+	return err
 }
 
 func organize(force bool, destDir string, years []string) (cnt uint32, err error) {

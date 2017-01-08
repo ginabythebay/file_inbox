@@ -24,13 +24,13 @@ const (
 	rootFlag         string = "root"
 	skipConfigFlag          = "skipconfig"
 	forceFlag               = "force"
-	extraInboxesFlag        = "extraInboxes"
 )
 
 // Config represents some configuration we can store/read
 type Config struct {
 	persist bool
 	Root    string
+	ExtraInboxes []string
 	CC      struct {
 		Root  string
 		Dests []string
@@ -140,10 +140,6 @@ func newCli() *cli.App {
 			Name:  forceFlag,
 			Usage: "If set, we will create destination directories as needed.",
 		},
-		cli.StringSliceFlag{
-			Name:  extraInboxesFlag,
-			Usage: "If set, these additional directories will be treated as inboxes to process",
-		},
 	}
 	return app
 }
@@ -152,7 +148,7 @@ func main() {
 	sigChan := make(chan os.Signal)
 	go func() {
 		stacktrace := make([]byte, 8192)
-		for _ = range sigChan {
+		for range sigChan {
 			length := runtime.Stack(stacktrace, true)
 			fmt.Println(string(stacktrace[:length]))
 		}
@@ -253,7 +249,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 	}
 
 	allInboxes := []string{config.inbox()}
-	allInboxes = append(allInboxes, ctx.StringSlice(extraInboxesFlag)...)
+	allInboxes = append(allInboxes, config.ExtraInboxes...)
 	for _, inbox := range allInboxes {
 		if err := processInbox(inbox, config, force, &fr); err != nil {
 			return fr, errors.Wrapf(err, "processing %s", inbox)
@@ -515,7 +511,7 @@ type parsedName struct {
 	dest     string // e.g. pge
 }
 
-var fileRe = regexp.MustCompile(`^(\d\d\d\d)(\d\d)(\d\d)_([^_\.]+).*$`)
+var fileRe = regexp.MustCompile(`^(\d\d\d\d)(\d\d)(\d\d)_([^_.]+).*$`)
 
 func parseFileName(force bool, baseName string) (*parsedName, error) {
 	matches := fileRe.FindStringSubmatch(baseName)

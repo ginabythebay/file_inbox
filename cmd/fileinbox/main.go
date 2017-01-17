@@ -440,8 +440,8 @@ func organize(force bool, destDir string, years []string) (cnt uint32, err error
 	return cnt, nil
 }
 
-func move(fromName, toName string) error {
-	err := os.Rename(fromName, toName)
+func move(fromName, toName string) (err error) {
+	err = os.Rename(fromName, toName)
 	if err == nil {
 		return nil
 	}

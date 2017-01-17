@@ -21,17 +21,17 @@ import (
 )
 
 const (
-	rootFlag         string = "root"
-	skipConfigFlag          = "skipconfig"
-	forceFlag               = "force"
+	rootFlag       string = "root"
+	skipConfigFlag        = "skipconfig"
+	forceFlag             = "force"
 )
 
 // Config represents some configuration we can store/read
 type Config struct {
-	persist bool
-	Root    string
+	persist      bool
+	Root         string
 	ExtraInboxes []string
-	CC      struct {
+	CC           struct {
 		Root  string
 		Dests []string
 	}
@@ -314,22 +314,21 @@ func processInbox(inbox string, config *Config, force bool, fr *fileResult) erro
 
 	// move the inbox files into place
 	for i, parsed := range allParsed {
-		if src, dest:= cc(config, inbox, parsed); src != "" {
+		if src, dest := cc(config, inbox, parsed); src != "" {
 			dir, _ := path.Split(dest)
 			if !isDir(dir) {
-				if err := os.Mkdir(dir, 0700); err != nil {
+				if err = os.Mkdir(dir, 0700); err != nil {
 					fmt.Printf("Failed to create dir %q: %+v\n", dir, err)
 					fr.failureCount++
 					continue
 				}
 			}
-			if err := copyFile(src, dest); err != nil {
+			if err = copyFile(src, dest); err != nil {
 				fmt.Printf("Unable to copy from %q to %q: %+v\n", src, dest, err)
 				fr.failureCount++
 				continue
 			}
 		}
-
 
 		dest := config.dest(parsed.dest)
 		oldPath := path.Join(inbox, parsed.baseName)

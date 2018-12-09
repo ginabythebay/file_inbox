@@ -248,7 +248,7 @@ func doFileInner(ctx *cli.Context) (fileResult, error) {
 		}
 	}
 
-	allInboxes := []string{config.inbox()}
+	allInboxes := []string{}
 	allInboxes = append(allInboxes, config.ExtraInboxes...)
 	for _, inbox := range allInboxes {
 		if err := processInbox(inbox, config, force, &fr); err != nil {

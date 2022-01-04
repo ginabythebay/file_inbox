@@ -17,13 +17,13 @@ import (
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 const (
 	rootFlag       string = "root"
-	skipConfigFlag        = "skipconfig"
-	forceFlag             = "force"
+	skipConfigFlag string = "skipconfig"
+	forceFlag      string = "force"
 )
 
 // Config represents some configuration we can store/read
@@ -128,15 +128,15 @@ func newCli() *cli.App {
 	app.Usage = "Move files into the correct place, using their names."
 	app.Action = doFile
 	app.Flags = []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  rootFlag,
 			Usage: "Specifies the root directory.  Will be saved into ~/.config/fileinbox/fileinbox.yaml"},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:   skipConfigFlag,
 			Usage:  "If set, we don't read or write configuration.  Meant for testing.",
 			Hidden: true,
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  forceFlag,
 			Usage: "If set, we will create destination directories as needed.",
 		},
@@ -185,7 +185,7 @@ func (fr fileResult) summarize(duration time.Duration) error {
 		fmt.Printf("\n\nYou can automatically create the above directories by running this command again with the --%s flag", forceFlag)
 	}
 	if fr.failureCount != 0 {
-		return fmt.Errorf("There were %d failures", fr.failureCount)
+		return fmt.Errorf("there were %d failures", fr.failureCount)
 	}
 	fmt.Println()
 	return nil
@@ -524,7 +524,7 @@ var fileRe = regexp.MustCompile(`^(\d\d\d\d)(\d\d)(\d\d)_([^_.]+).*$`)
 func parseFileName(force bool, baseName string) (*parsedName, error) {
 	matches := fileRe.FindStringSubmatch(baseName)
 	if matches == nil || len(matches) != 5 {
-		return nil, fmt.Errorf("Unable to parse %q.  We expect an 8 digit value like 20160825_pge_taxes2016.pdf or 20160825_pge.pdf", baseName)
+		return nil, fmt.Errorf("unable to parse %q.  We expect an 8 digit value like 20160825_pge_taxes2016.pdf or 20160825_pge.pdf", baseName)
 	}
 	year, month, date, dest := matches[1], matches[2], matches[3], matches[4]
 
@@ -564,7 +564,7 @@ func (ut unitTest) verify(s string) (i int, err error) {
 		return 0, err
 	}
 	if i < ut.min || i > ut.max {
-		return 0, fmt.Errorf("Unexpected %s %q.  We expect a value between %d and %d", ut.unit, s, ut.min, ut.max)
+		return 0, fmt.Errorf("unexpected %s %q.  We expect a value between %d and %d", ut.unit, s, ut.min, ut.max)
 	}
 	return i, nil
 }

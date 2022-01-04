@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 // assert fails the test if the condition is false.

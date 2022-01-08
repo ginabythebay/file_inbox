@@ -497,9 +497,13 @@ func doFile(ctx *cli.Context) error {
 	duration := time.Since(start)
 	summarizeErr := fr.summarize(duration)
 	if err != nil {
-		fmt.Printf("\n\nError: %+v", err)
+		fmt.Printf("\n\nError: %+v\n", err)
 	}
-	return anyError(err, summarizeErr)
+	if anyError(err, summarizeErr) != nil {
+		fmt.Printf("\\n\n**** Look above for error(s) ***\n")
+		os.Exit(1)
+	}
+	return nil
 }
 
 func anyError(errs ...error) error {
